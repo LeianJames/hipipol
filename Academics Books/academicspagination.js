@@ -30,15 +30,14 @@ function checkLoginStatus() {
       localStorage.removeItem('isLoggedIn');
       localStorage.removeItem('userRole');
       localStorage.removeItem('username');
-      window.location.href = '../page1.html';
+      window.location.href = 'page1.html';
     });
     
     // Set admin mode if user is admin
     isAdmin = userRole === 'admin';
   } else {
-    userInfoElement.innerHTML = `
-      <a href="../page1.html" class="btn btn-sm btn-outline-primary">Login</a>
-    `;
+    // If not logged in, redirect back to login page
+    window.location.href = 'page1.html';
   }
 }
 
@@ -226,25 +225,13 @@ function renderBooks() {
         <span class="library-location">${book.location}</span>
       `;
     } else {
-      // Regular user or student view
-      const userRole = localStorage.getItem('userRole') || 'guest';
-      const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
-      
-      if (userRole === 'student' && isLoggedIn) {
-        // Student view - no availability button
-        actionsHtml = `
-          <span class="library-location">${book.location}</span>
-          <span class="ms-2 badge ${book.available ? 'bg-success' : 'bg-danger'}">
-            ${book.available ? 'Available' : 'Not Available'}
-          </span>
-        `;
-      } else {
-        // Guest view - with availability button
-        actionsHtml = `
-          <button class="check-availability btn btn-sm btn-primary me-2" data-book-id="${book.id}">Check availability</button>
-          <span class="library-location">${book.location}</span>
-        `;
-      }
+      // Student view - can see availability but can't change it
+      actionsHtml = `
+        <span class="library-location">${book.location}</span>
+        <span class="ms-2 badge ${book.available ? 'bg-success' : 'bg-danger'}">
+          ${book.available ? 'Available' : 'Not Available'}
+        </span>
+      `;
     }
     
     bookElement.innerHTML = `
@@ -276,16 +263,6 @@ function renderBooks() {
       button.addEventListener('click', function() {
         const bookId = parseInt(this.getAttribute('data-book-id'));
         removeBook(bookId);
-      });
-    });
-  } else {
-    document.querySelectorAll('.check-availability').forEach(button => {
-      button.addEventListener('click', function() {
-        const bookId = parseInt(this.getAttribute('data-book-id'));
-        const book = books.find(b => b.id === bookId);
-        if (book) {
-          showAvailabilityPopup(book);
-        }
       });
     });
   }
