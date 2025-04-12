@@ -1,7 +1,9 @@
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcrypt');
+const path = require('path');
 
-const db = new sqlite3.Database('library-backend\database.db', (err) => {
+// Use path.join for cross-platform compatibility
+const db = new sqlite3.Database('./database.db', (err) => {
   if (err) {
     console.error(err.message);
     return;

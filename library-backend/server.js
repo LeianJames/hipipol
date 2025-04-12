@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 
 // Configure middleware
 app.use(cors({
-  origin: 'http://localhost:5500', // Change to your frontend URL
+  origin: 'http://127.0.0.1:5500/page1.html', // Change to your frontend URL
   credentials: true
 }));
 app.use(bodyParser.json());
@@ -144,6 +144,61 @@ app.post('/api/books', (req, res) => {
           available: true
         }
       });
+    }
+  );
+});
+
+// Update book availability
+app.put('/api/books/:id/availability', (req, res) => {
+  // Check if user is authenticated and is an admin
+  if (!req.session.user || req.session.user.role !== 'admin') {
+    return res.status(403).json({ success: false, message: 'Not authorized' });
+  }
+ 
+  const bookId = req.params.id;
+  const { available } = req.body;
+ 
+  db.run(
+    'UPDATE BOOKS SET available = ? WHERE id = ?',
+    [available ? 1 : 0, bookId],
+    function(err) {
+      if (err) {
+        console.error(err.message);
+        return res.status(500).json({ success: false, message: 'Server error' });
+      }
+     
+      if (this.changes === 0) {
+        return res.status(404).json({ success: false, message: 'Book not found' });
+      }
+     
+      res.json({ success: true });
+    }
+  );
+});
+
+// Delete book
+app.delete('/api/books/:id', (req, res) => {
+  // Check if user is authenticated and is an admin
+  if (!req.session.user || req.session.user.role !== 'admin') {
+    return res.status(403).json({ success: false, message: 'Not authorized' });
+  }
+ 
+  const bookId = req.params.id;
+ 
+  db.run(
+    'DELETE FROM BOOKS WHERE id = ?',
+    [bookId],
+    function(err) {
+      if (err) {
+        console.error(err.message);
+        return res.status(500).json({ success: false, message: 'Server error' });
+      }
+     
+      if (this.changes === 0) {
+        return res.status(404).json({ success: false, message: 'Book not found' });
+      }
+     
+      res.json({ success: true });
     }
   );
 });

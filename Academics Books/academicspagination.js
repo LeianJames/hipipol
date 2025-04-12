@@ -2,6 +2,7 @@
 let currentPage = 1;
 let itemsPerPage = 10; // Default items per page
 let isAdmin = false; // Flag to check if admin mode is active
+let books = []; // Will be populated from API
 
 // DOM elements
 const bookResultsContainer = document.getElementById('bookResults');
@@ -12,33 +13,74 @@ const userInfoElement = document.getElementById('user-info');
 
 // Check user login status
 function checkLoginStatus() {
-  const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
-  const userRole = localStorage.getItem('userRole') || 'guest';
-  const username = localStorage.getItem('username') || 'Guest';
-  
-  // Update UI based on login status
-  if (isLoggedIn) {
-    userInfoElement.innerHTML = `
-      <div class="d-flex align-items-center">
-        <span class="me-2">Welcome, ${username} (${userRole})</span>
-        <button class="btn btn-sm btn-outline-secondary" id="logoutBtn">Logout</button>
-      </div>
-    `;
-    
-    // Add logout functionality
-    document.getElementById('logoutBtn').addEventListener('click', function() {
-      localStorage.removeItem('isLoggedIn');
-      localStorage.removeItem('userRole');
-      localStorage.removeItem('username');
+  fetch('http://localhost:3000/api/check-auth', {
+    method: 'GET',
+    credentials: 'include'
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.isLoggedIn) {
+      userInfoElement.innerHTML = `
+        <div class="d-flex align-items-center">
+          <span class="me-2">Welcome, ${data.user.username} (${data.user.role})</span>
+          <button class="btn btn-sm btn-outline-secondary" id="logoutBtn">Logout</button>
+        </div>
+      `;
+     
+      // Add logout functionality
+      document.getElementById('logoutBtn').addEventListener('click', function() {
+        fetch('http://localhost:3000/api/logout', {
+          method: 'POST',
+          credentials: 'include'
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            window.location.href = 'page1.html';
+          }
+        })
+        .catch(error => {
+          console.error('Error logging out:', error);
+        });
+      });
+     
+      // Set admin mode if user is admin
+      isAdmin = data.user.role === 'admin';
+     
+      // Load books
+      loadBooks();
+    } else {
+      // If not logged in, redirect back to login page
       window.location.href = 'page1.html';
-    });
-    
-    // Set admin mode if user is admin
-    isAdmin = userRole === 'admin';
-  } else {
-    // If not logged in, redirect back to login page
+    }
+  })
+  .catch(error => {
+    console.error('Error checking login status:', error);
+    // If error, redirect to login
     window.location.href = 'page1.html';
-  }
+  });
+}
+
+// Load books from API
+function loadBooks() {
+  fetch('http://localhost:3000/api/books', {
+    method: 'GET',
+    credentials: 'include'
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      books = data.books;
+      updateTotalResults();
+      renderBooks();
+      renderPagination();
+    } else {
+      console.error('Failed to load books:', data.message);
+    }
+  })
+  .catch(error => {
+    console.error('Error loading books:', error);
+  });
 }
 
 // Update total results count
@@ -50,17 +92,10 @@ function updateTotalResults() {
 document.addEventListener('DOMContentLoaded', function() {
   // Check login status
   checkLoginStatus();
-  
-  // Update total results count
-  updateTotalResults();
-  
+ 
   // Set the default selected option for items per page
   itemsPerPageSelect.value = itemsPerPage;
-  
-  // Initial render
-  renderBooks();
-  renderPagination();
-  
+ 
   // Add event listener for items per page change
   itemsPerPageSelect.addEventListener('change', function() {
     itemsPerPage = parseInt(this.value);
@@ -71,14 +106,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Add admin controls if user is admin
   if (isAdmin) {
-    // Add button for new book
+    // Add button for new book (will be added after login check)
     const addBookBtn = document.createElement('button');
     addBookBtn.innerHTML = 'Add New Book';
     addBookBtn.className = 'btn btn-success ms-2';
     addBookBtn.setAttribute('data-bs-toggle', 'modal');
     addBookBtn.setAttribute('data-bs-target', '#addBookModal');
     document.querySelector('.results-controls').appendChild(addBookBtn);
-    
+   
     // Add save book event listener
     document.getElementById('saveBookBtn').addEventListener('click', function() {
       addNewBook();
@@ -100,247 +135,55 @@ function addNewBook() {
   const author = document.getElementById('bookAuthor').value;
   const description = document.getElementById('bookDescription').value;
   const location = document.getElementById('bookLocation').value;
-  
+ 
   // Validate form
   if (!title || !author || !description) {
     alert('Please fill in all required fields');
     return;
   }
-  
-  // Create new book object
-  const newBook = {
-    id: books.length + 1,
-    title: title,
-    author: author,
-    description: description ? `Book - ${description};` : 'Book;',
-    location: location || 'Nova Schola Main Library',
-    available: true
-  };
-  
-  // Add book to array
-  books.push(newBook);
-  
-  // Save books data
-  saveBooks();
-  
-  // Update total results count
-  updateTotalResults();
-  
-  // Re-render books list
-  renderBooks();
-  renderPagination();
-  
-  // Close modal
-  const modal = bootstrap.Modal.getInstance(document.getElementById('addBookModal'));
-  modal.hide();
-  
-  // Clear form
-  document.getElementById('addBookForm').reset();
-}
-
-// Function to remove a book
-function removeBook(bookId) {
-  if (confirm('Are you sure you want to remove this book?')) {
-    const bookIndex = books.findIndex(book => book.id === bookId);
-    if (bookIndex !== -1) {
-      books.splice(bookIndex, 1);
-      saveBooks();
+ 
+  // Send request to API
+  fetch('http://localhost:3000/api/books', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify({
+      title,
+      author,
+      description: description ? `Book - ${description};` : 'Book;',
+      location: location || 'Nova Schola Main Library'
+    }),
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      // Add book to array
+      books.push(data.book);
+     
+      // Update total results count
       updateTotalResults();
+     
+      // Re-render books list
       renderBooks();
       renderPagination();
-    }
-  }
-}
-
-// Function to show availability popup
-function showAvailabilityPopup(book) {
-  const popup = document.getElementById('availabilityPopup');
-  
-  // Create popup content
-  popup.innerHTML = `
-    <div class="popup-content">
-      <span class="close-popup">&times;</span>
-      <h3>${book.title}</h3>
-      <p><strong>Status:</strong> ${book.available ? 'Available' : 'Not Available'}</p>
-      <p><strong>Location:</strong> ${book.location}</p>
-      ${book.available ? 
-        '<p>You can check out this book at the library desk.</p>' : 
-        '<p>This book is currently checked out. Please check back later.</p>'}
-    </div>
-  `;
-  
-  // Add close button functionality
-  popup.querySelector('.close-popup').addEventListener('click', function() {
-    popup.style.display = 'none';
-  });
-  
-  // Display the popup
-  popup.style.display = 'block';
-  
-  // Close popup when clicking outside
-  window.addEventListener('click', function(event) {
-    if (event.target == popup) {
-      popup.style.display = 'none';
-    }
-  });
-}
-
-// Function to toggle book availability (admin only)
-function toggleAvailability(bookId) {
-  if (!isAdmin) return;
-  
-  const bookIndex = books.findIndex(book => book.id === bookId);
-  if (bookIndex !== -1) {
-    books[bookIndex].available = !books[bookIndex].available;
-    saveBooks(); // Save the updated availability status
-    renderBooks(); // Re-render the books list
-  }
-}
-
-// Function to display books based on current page and items per page
-function renderBooks() {
-  // Clear current results
-  bookResultsContainer.innerHTML = '';
-  
-  // Calculate start and end indices
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = Math.min(startIndex + itemsPerPage, books.length);
-  
-  // Generate HTML for each book in the current page
-  for (let i = startIndex; i < endIndex; i++) {
-    const book = books[i];
-    const bookElement = document.createElement('div');
-    bookElement.className = 'result-item';
-    
-    let actionsHtml = '';
-    if (isAdmin) {
-      // Admin view with toggle and remove options
-      actionsHtml = `
-        <button class="toggle-availability btn btn-sm btn-warning me-2" data-book-id="${book.id}">
-          ${book.available ? 'Mark as Unavailable' : 'Mark as Available'}
-        </button>
-        <button class="remove-book btn btn-sm btn-danger me-2" data-book-id="${book.id}">
-          Remove Book
-        </button>
-        <span class="library-location">${book.location}</span>
-      `;
+     
+      // Close modal
+      const modal = bootstrap.Modal.getInstance(document.getElementById('addBookModal'));
+      modal.hide();
+     
+      // Clear form
+      document.getElementById('addBookForm').reset();
     } else {
-      // Student view - can see availability but can't change it
-      actionsHtml = `
-        <span class="library-location">${book.location}</span>
-        <span class="ms-2 badge ${book.available ? 'bg-success' : 'bg-danger'}">
-          ${book.available ? 'Available' : 'Not Available'}
-        </span>
-      `;
+      alert(data.message || 'Failed to add book');
     }
-    
-    bookElement.innerHTML = `
-      <div class="result-number">${i + 1}</div>
-      <div class="result-details">
-        <h3 class="result-title">${book.title}</h3>
-        <p class="result-author">${book.author}</p>
-        ${book.publication ? `<p class="result-publication">${book.publication}</p>` : ''}
-        <p class="result-description">${book.description}</p>
-        <div class="result-actions">
-          ${actionsHtml}
-        </div>
-      </div>
-    `;
-    
-    bookResultsContainer.appendChild(bookElement);
-  }
-  
-  // Add event listeners for buttons
-  if (isAdmin) {
-    document.querySelectorAll('.toggle-availability').forEach(button => {
-      button.addEventListener('click', function() {
-        const bookId = parseInt(this.getAttribute('data-book-id'));
-        toggleAvailability(bookId);
-      });
-    });
-    
-    document.querySelectorAll('.remove-book').forEach(button => {
-      button.addEventListener('click', function() {
-        const bookId = parseInt(this.getAttribute('data-book-id'));
-        removeBook(bookId);
-      });
-    });
-  }
+  })
+  .catch(error => {
+    console.error('Error adding book:', error);
+    alert('An error occurred while adding the book');
+  });
 }
 
-// Function to render pagination controls
-function renderPagination() {
-  // Clear current pagination
-  paginationContainer.innerHTML = '';
-  
-  // Calculate total pages
-  const totalPages = Math.ceil(books.length / itemsPerPage);
-  
-  // Add previous button if not on first page
-  if (currentPage > 1) {
-    const prevButton = document.createElement('button');
-    prevButton.innerHTML = '← Previous';
-    prevButton.addEventListener('click', function() {
-      currentPage--;
-      renderBooks();
-      renderPagination();
-    });
-    paginationContainer.appendChild(prevButton);
-  }
-  
-  // Add page number buttons
-  // For simplicity, show max 5 page numbers
-  const maxPagesToShow = 5;
-  let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
-  let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
-  
-  // Adjust start page if we're near the end
-  if (endPage - startPage + 1 < maxPagesToShow) {
-    startPage = Math.max(1, endPage - maxPagesToShow + 1);
-  }
-  
-  for (let i = startPage; i <= endPage; i++) {
-    const pageButton = document.createElement('button');
-    pageButton.innerHTML = i;
-    
-    if (i === currentPage) {
-      pageButton.className = 'active';
-    }
-    
-    pageButton.addEventListener('click', function() {
-      currentPage = i;
-      renderBooks();
-      renderPagination();
-    });
-    
-    paginationContainer.appendChild(pageButton);
-  }
-  
-  // Add next button if not on last page
-  if (currentPage < totalPages) {
-    const nextButton = document.createElement('button');
-    nextButton.innerHTML = 'Next →';
-    nextButton.addEventListener('click', function() {
-      currentPage++;
-      renderBooks();
-      renderPagination();
-    });
-    paginationContainer.appendChild(nextButton);
-  }
-  
-  // Add a simple text showing current range of items
-  const startItem = (currentPage - 1) * itemsPerPage + 1;
-  const endItem = Math.min(currentPage * itemsPerPage, books.length);
-  
-  const rangeInfo = document.createElement('span');
-  rangeInfo.className = 'page-info';
-  rangeInfo.innerHTML = `Showing ${startItem}-${endItem} of ${books.length}`;
-  paginationContainer.appendChild(rangeInfo);
-}
-
-// Function to navigate to a specific page
-function goToPage(pageNumber) {
-  currentPage = pageNumber;
-  renderBooks();
-  renderPagination();
-}
+// Rest of your functions (renderBooks, renderPagination, etc.)
+// ...
