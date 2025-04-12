@@ -8,12 +8,53 @@ const bookResultsContainer = document.getElementById('bookResults');
 const paginationContainer = document.getElementById('paginationControls');
 const itemsPerPageSelect = document.getElementById('itemsPerPage');
 const totalResultsElement = document.getElementById('totalResults');
+const userInfoElement = document.getElementById('user-info');
+
+// Check user login status
+function checkLoginStatus() {
+  const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+  const userRole = localStorage.getItem('userRole') || 'guest';
+  const username = localStorage.getItem('username') || 'Guest';
+  
+  // Update UI based on login status
+  if (isLoggedIn) {
+    userInfoElement.innerHTML = `
+      <div class="d-flex align-items-center">
+        <span class="me-2">Welcome, ${username} (${userRole})</span>
+        <button class="btn btn-sm btn-outline-secondary" id="logoutBtn">Logout</button>
+      </div>
+    `;
+    
+    // Add logout functionality
+    document.getElementById('logoutBtn').addEventListener('click', function() {
+      localStorage.removeItem('isLoggedIn');
+      localStorage.removeItem('userRole');
+      localStorage.removeItem('username');
+      window.location.href = '../page1.html';
+    });
+    
+    // Set admin mode if user is admin
+    isAdmin = userRole === 'admin';
+  } else {
+    userInfoElement.innerHTML = `
+      <a href="../page1.html" class="btn btn-sm btn-outline-primary">Login</a>
+    `;
+  }
+}
 
 // Update total results count
-totalResultsElement.textContent = books.length;
+function updateTotalResults() {
+  totalResultsElement.textContent = books.length;
+}
 
 // Initialize with default settings
 document.addEventListener('DOMContentLoaded', function() {
+  // Check login status
+  checkLoginStatus();
+  
+  // Update total results count
+  updateTotalResults();
+  
   // Set the default selected option for items per page
   itemsPerPageSelect.value = itemsPerPage;
   
@@ -29,12 +70,21 @@ document.addEventListener('DOMContentLoaded', function() {
     renderPagination();
   });
 
-  // Add admin login button to the page
-  const adminButton = document.createElement('button');
-  adminButton.innerHTML = 'Admin Login';
-  adminButton.className = 'admin-button';
-  adminButton.addEventListener('click', toggleAdminMode);
-  document.querySelector('.results-controls').appendChild(adminButton);
+  // Add admin controls if user is admin
+  if (isAdmin) {
+    // Add button for new book
+    const addBookBtn = document.createElement('button');
+    addBookBtn.innerHTML = 'Add New Book';
+    addBookBtn.className = 'btn btn-success ms-2';
+    addBookBtn.setAttribute('data-bs-toggle', 'modal');
+    addBookBtn.setAttribute('data-bs-target', '#addBookModal');
+    document.querySelector('.results-controls').appendChild(addBookBtn);
+    
+    // Add save book event listener
+    document.getElementById('saveBookBtn').addEventListener('click', function() {
+      addNewBook();
+    });
+  }
 
   // Create popup container
   const popupContainer = document.createElement('div');
@@ -44,24 +94,63 @@ document.addEventListener('DOMContentLoaded', function() {
   document.body.appendChild(popupContainer);
 });
 
-// Function to toggle admin mode
-function toggleAdminMode() {
-  // In a real application, you would have authentication
-  // For demo purposes, we'll just toggle the admin mode
-  isAdmin = !isAdmin;
+// Function to add a new book
+function addNewBook() {
+  // Get form values
+  const title = document.getElementById('bookTitle').value;
+  const author = document.getElementById('bookAuthor').value;
+  const description = document.getElementById('bookDescription').value;
+  const location = document.getElementById('bookLocation').value;
   
-  const adminButton = document.querySelector('.admin-button');
-  if (isAdmin) {
-    adminButton.innerHTML = 'Exit Admin Mode';
-    adminButton.classList.add('active');
-    alert('Admin mode activated. You can now update book availability.');
-  } else {
-    adminButton.innerHTML = 'Admin Login';
-    adminButton.classList.remove('active');
-    alert('Exited admin mode.');
+  // Validate form
+  if (!title || !author || !description) {
+    alert('Please fill in all required fields');
+    return;
   }
   
-  renderBooks(); // Re-render to update buttons
+  // Create new book object
+  const newBook = {
+    id: books.length + 1,
+    title: title,
+    author: author,
+    description: description ? `Book - ${description};` : 'Book;',
+    location: location || 'Nova Schola Main Library',
+    available: true
+  };
+  
+  // Add book to array
+  books.push(newBook);
+  
+  // Save books data
+  saveBooks();
+  
+  // Update total results count
+  updateTotalResults();
+  
+  // Re-render books list
+  renderBooks();
+  renderPagination();
+  
+  // Close modal
+  const modal = bootstrap.Modal.getInstance(document.getElementById('addBookModal'));
+  modal.hide();
+  
+  // Clear form
+  document.getElementById('addBookForm').reset();
+}
+
+// Function to remove a book
+function removeBook(bookId) {
+  if (confirm('Are you sure you want to remove this book?')) {
+    const bookIndex = books.findIndex(book => book.id === bookId);
+    if (bookIndex !== -1) {
+      books.splice(bookIndex, 1);
+      saveBooks();
+      updateTotalResults();
+      renderBooks();
+      renderPagination();
+    }
+  }
 }
 
 // Function to show availability popup
@@ -99,6 +188,8 @@ function showAvailabilityPopup(book) {
 
 // Function to toggle book availability (admin only)
 function toggleAvailability(bookId) {
+  if (!isAdmin) return;
+  
   const bookIndex = books.findIndex(book => book.id === bookId);
   if (bookIndex !== -1) {
     books[bookIndex].available = !books[bookIndex].available;
@@ -124,19 +215,36 @@ function renderBooks() {
     
     let actionsHtml = '';
     if (isAdmin) {
-      // If in admin mode, show toggle button
+      // Admin view with toggle and remove options
       actionsHtml = `
-        <button class="toggle-availability" data-book-id="${book.id}">
+        <button class="toggle-availability btn btn-sm btn-warning me-2" data-book-id="${book.id}">
           ${book.available ? 'Mark as Unavailable' : 'Mark as Available'}
+        </button>
+        <button class="remove-book btn btn-sm btn-danger me-2" data-book-id="${book.id}">
+          Remove Book
         </button>
         <span class="library-location">${book.location}</span>
       `;
     } else {
-      // Regular user view
-      actionsHtml = `
-        <button class="check-availability" data-book-id="${book.id}">Check availability</button>
-        <span class="library-location">${book.location}</span>
-      `;
+      // Regular user or student view
+      const userRole = localStorage.getItem('userRole') || 'guest';
+      const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+      
+      if (userRole === 'student' && isLoggedIn) {
+        // Student view - no availability button
+        actionsHtml = `
+          <span class="library-location">${book.location}</span>
+          <span class="ms-2 badge ${book.available ? 'bg-success' : 'bg-danger'}">
+            ${book.available ? 'Available' : 'Not Available'}
+          </span>
+        `;
+      } else {
+        // Guest view - with availability button
+        actionsHtml = `
+          <button class="check-availability btn btn-sm btn-primary me-2" data-book-id="${book.id}">Check availability</button>
+          <span class="library-location">${book.location}</span>
+        `;
+      }
     }
     
     bookElement.innerHTML = `
@@ -161,6 +269,13 @@ function renderBooks() {
       button.addEventListener('click', function() {
         const bookId = parseInt(this.getAttribute('data-book-id'));
         toggleAvailability(bookId);
+      });
+    });
+    
+    document.querySelectorAll('.remove-book').forEach(button => {
+      button.addEventListener('click', function() {
+        const bookId = parseInt(this.getAttribute('data-book-id'));
+        removeBook(bookId);
       });
     });
   } else {

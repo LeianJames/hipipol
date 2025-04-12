@@ -107,7 +107,7 @@ const books = [
 
       {
         id: 14,
-        title: "Magsasaka ka, hindi magsasaka lang: perceived effectiveness of the magsasakang Tanaueno agricultural marketing cooperative (MTMAC) among local farmers of barangay Santor and barangay Janopol Oriental in Tanauan City, Batangas",
+        title: "Magsasaka ka, hindi magsasaka lang: perceived effectiveness of the magsasakang Tanaueno Agricultural Marketing Cooperative (MTAMC) among local farmers of barangay Santor and barangay Janopol Oriental in Tanauan City, Batangas",
         author: "Salazar et al.",
         description: "Book - 177 pages;",
         location: "Nova Schola Main Library"
