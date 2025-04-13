@@ -12,26 +12,103 @@ const PORT = process.env.PORT || 3000;
 
 // Configure middleware
 app.use(cors({
-  origin: 'http://127.0.0.1:5500/page1.html', // Change to your frontend URL
+  origin: '*', // Allow requests from any origin during development
   credentials: true
 }));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(session({
-  secret: 'your-secret-key', // Change this to a random string
+  secret: 'Sambat', // Change this to a random string (secret key)
   resave: false,
   saveUninitialized: false,
   cookie: { secure: false } // Set to true if using HTTPS
 }));
 
 // Connect to SQLite database
-const db = new sqlite3.Database('./database.db', (err) => {
+const db = new sqlite3.Database(path.join(__dirname, './database.db'), (err) => {
   if (err) {
     console.error('Error connecting to database:', err.message);
   } else {
     console.log('Connected to the SQLite database');
+    
+    // Initialize database tables
+    initDatabase();
   }
 });
+
+// Initialize database tables
+function initDatabase() {
+  // Create USERS table if it doesn't exist
+  db.run(`CREATE TABLE IF NOT EXISTS USERS (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    password TEXT NOT NULL,
+    role TEXT NOT NULL
+  )`, (err) => {
+    if (err) {
+      console.error('Error creating USERS table:', err.message);
+    } else {
+      console.log('USERS table initialized');
+      
+      // Check if we need to create default users
+      db.get('SELECT COUNT(*) as count FROM USERS', [], async (err, result) => {
+        if (err) {
+          console.error('Error checking USERS:', err.message);
+        } else if (result.count === 0) {
+          // Create default admin and student users
+          const adminPassword = await bcrypt.hash('admin123', 10);
+          const studentPassword = await bcrypt.hash('student123', 10);
+          
+          db.run('INSERT INTO USERS (username, password, role) VALUES (?, ?, ?)', 
+            ['admin1', adminPassword, 'admin'], (err) => {
+              if (err) console.error('Error creating admin user:', err.message);
+              else console.log('Admin user created');
+          });
+          
+          db.run('INSERT INTO USERS (username, password, role) VALUES (?, ?, ?)', 
+            ['student1', studentPassword, 'student'], (err) => {
+              if (err) console.error('Error creating student user:', err.message);
+              else console.log('Student user created');
+          });
+        }
+      });
+    }
+  });
+  
+  // Create BOOKS table if it doesn't exist
+  db.run(`CREATE TABLE IF NOT EXISTS BOOKS (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    author TEXT NOT NULL,
+    description TEXT,
+    location TEXT,
+    available BOOLEAN DEFAULT 1
+  )`, (err) => {
+    if (err) {
+      console.error('Error creating BOOKS table:', err.message);
+    } else {
+      console.log('BOOKS table initialized');
+      
+      // Add sample books if no books exist
+      db.get('SELECT COUNT(*) as count FROM BOOKS', [], (err, result) => {
+        if (err) {
+          console.error('Error checking BOOKS:', err.message);
+        } else if (result.count === 0) {
+          // Insert sample books from academicsdatabase.js
+          const sampleBooks = require('../Academics Books/academicsdatabase.js').books;
+          sampleBooks.forEach(book => {
+            db.run('INSERT INTO BOOKS (title, author, description, location, available) VALUES (?, ?, ?, ?, ?)',
+              [book.title, book.author, book.description, book.location, book.available ? 1 : 0],
+              (err) => {
+                if (err) console.error(`Error adding book ${book.title}:`, err.message);
+            });
+          });
+          console.log('Sample books added');
+        }
+      });
+    }
+  });
+}
 
 // Serve static files
 app.use(express.static(path.join(__dirname, '../')));
@@ -51,27 +128,31 @@ app.post('/api/login', (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid username or role' });
     }
    
-    // In a real application, we would compare hashed passwords
-    // This is a placeholder for demonstration
-    const passwordMatch = await bcrypt.compare(password, user.password);
-    if (!passwordMatch) {
-      return res.status(401).json({ success: false, message: 'Invalid password' });
-    }
-   
-    // Set session data
-    req.session.user = {
-      id: user.id,
-      username: user.username,
-      role: user.role
-    };
-   
-    return res.json({
-      success: true,
-      user: {
+    try {
+      // Compare hashed passwords
+      const passwordMatch = await bcrypt.compare(password, user.password);
+      if (!passwordMatch) {
+        return res.status(401).json({ success: false, message: 'Invalid password' });
+      }
+     
+      // Set session data
+      req.session.user = {
+        id: user.id,
         username: user.username,
         role: user.role
-      }
-    });
+      };
+     
+      return res.json({
+        success: true,
+        user: {
+          username: user.username,
+          role: user.role
+        }
+      });
+    } catch (error) {
+      console.error('Password comparison error:', error);
+      return res.status(500).json({ success: false, message: 'Server error' });
+    }
   });
 });
 
